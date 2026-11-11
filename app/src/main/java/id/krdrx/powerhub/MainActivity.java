@@ -229,7 +229,7 @@ public class MainActivity extends AppCompatActivity {
                         String result = remote.exec(command);
                         runOnUiThread(() -> {
                             if (result != null && !result.trim().isEmpty())
-                                Toast.makeText(this, result, Toast.LENGTH_LONG).show();
+                                Toast.makeText(MainActivity.this, result, Toast.LENGTH_LONG).show();
                         });
                     } catch (Exception exception) {
                         runOnUiThread(() -> showError("Gagal menjalankan perintah: " + exception.getMessage()));
