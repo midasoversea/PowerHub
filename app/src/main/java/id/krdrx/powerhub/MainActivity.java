@@ -1,8 +1,11 @@
 package id.krdrx.powerhub;
 
 import android.app.AlertDialog;
+import android.content.ComponentName;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.view.Gravity;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -12,23 +15,23 @@ import androidx.appcompat.app.AppCompatDelegate;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.color.MaterialColors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import rikka.shizuku.Shizuku;
 
 public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_PERMISSION = 1001;
     private TextView connectionStatus;
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private Shizuku.UserServiceArgs serviceArgs;
 
     private final Shizuku.OnRequestPermissionResultListener permissionListener =
         (requestCode, grantResult) -> updateStatus();
 
     private static class Action {
-        final String title;
-        final String detail;
-        final String command;
+        final String title, detail, command;
         Action(String title, String detail, String command) {
-            this.title = title;
-            this.detail = detail;
-            this.command = command;
+            this.title = title; this.detail = detail; this.command = command;
         }
     }
 
@@ -45,6 +48,9 @@ public class MainActivity extends AppCompatActivity {
         AppCompatDelegate.setDefaultNightMode(savedTheme);
         super.onCreate(savedInstanceState);
         buildScreen();
+        serviceArgs = new Shizuku.UserServiceArgs(
+            new ComponentName(BuildConfig.APPLICATION_ID, PowerUserService.class.getName()))
+            .daemon(false).processNameSuffix("power").tag("powerhub-command-service").version(1);
         Shizuku.addRequestPermissionResultListener(permissionListener);
         updateStatus();
     }
@@ -80,8 +86,7 @@ public class MainActivity extends AppCompatActivity {
 
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(label("PowerHub", 28, true),
-            new LinearLayout.LayoutParams(0, -2, 1));
+        header.addView(label("PowerHub", 28, true), new LinearLayout.LayoutParams(0, -2, 1));
         MaterialButton themeButton = button("Tema", false);
         themeButton.setOnClickListener(view -> toggleTheme());
         header.addView(themeButton);
@@ -132,7 +137,6 @@ public class MainActivity extends AppCompatActivity {
             LinearLayout row = new LinearLayout(this);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(16), dp(12), dp(12), dp(12));
-
             LinearLayout texts = new LinearLayout(this);
             texts.setOrientation(LinearLayout.VERTICAL);
             texts.addView(label(action.title, 16, true));
@@ -141,25 +145,20 @@ public class MainActivity extends AppCompatActivity {
             detailParams.topMargin = dp(3);
             texts.addView(detail, detailParams);
             row.addView(texts, new LinearLayout.LayoutParams(0, -2, 1));
-
             MaterialButton runButton = button("Jalankan", false);
             runButton.setOnClickListener(view -> confirmAction(action));
             row.addView(runButton);
             actionList.addView(row);
-
             if (i < actions.length - 1) {
                 android.view.View divider = new android.view.View(this);
                 divider.setBackgroundColor(0x33008080);
                 actionList.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
             }
         }
-
         actionCard.addView(actionList);
         root.addView(actionCard);
 
-        TextView footer = label(
-            "Perintah restart dan mati perangkat memerlukan konfirmasi. Beberapa firmware dapat membatasi operasi tertentu.",
-            12, false);
+        TextView footer = label("Perintah restart dan mati perangkat memerlukan konfirmasi. Beberapa firmware dapat membatasi operasi tertentu.", 12, false);
         LinearLayout.LayoutParams footerParams = new LinearLayout.LayoutParams(-1, -2);
         footerParams.topMargin = dp(16);
         root.addView(footer, footerParams);
@@ -180,15 +179,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void requestShizukuPermission() {
         if (!Shizuku.pingBinder()) {
-            new AlertDialog.Builder(this)
-                .setTitle("Shizuku belum aktif")
+            new AlertDialog.Builder(this).setTitle("Shizuku belum aktif")
                 .setMessage("Buka aplikasi Shizuku dan mulai servicenya. Setelah aktif, kembali ke PowerHub.")
-                .setPositiveButton("Mengerti", null)
-                .show();
+                .setPositiveButton("Mengerti", null).show();
             updateStatus();
             return;
         }
-
         if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
             Toast.makeText(this, "Izin Shizuku sudah diberikan", Toast.LENGTH_SHORT).show();
         } else {
@@ -204,25 +200,19 @@ public class MainActivity extends AppCompatActivity {
 
     private void updateStatus() {
         if (connectionStatus == null) return;
-        if (!Shizuku.pingBinder()) {
-            connectionStatus.setText("Shizuku tidak aktif");
-        } else if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+        if (!Shizuku.pingBinder()) connectionStatus.setText("Shizuku tidak aktif");
+        else if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED)
             connectionStatus.setText("Shizuku aktif · Izin diberikan");
-        } else {
-            connectionStatus.setText("Shizuku aktif · Izin belum diberikan");
-        }
+        else connectionStatus.setText("Shizuku aktif · Izin belum diberikan");
     }
 
     private void confirmAction(Action action) {
         String message = action.command.equals("input keyevent 26")
             ? "Layar akan dimatikan. Jika kunci layar aktif, perangkat juga akan terkunci."
             : "Jalankan perintah " + action.title + "?";
-        new AlertDialog.Builder(this)
-            .setTitle(action.title)
-            .setMessage(message)
+        new AlertDialog.Builder(this).setTitle(action.title).setMessage(message)
             .setNegativeButton("Batal", null)
-            .setPositiveButton("Lanjutkan", (dialog, which) -> execute(action.command))
-            .show();
+            .setPositiveButton("Lanjutkan", (dialog, which) -> execute(action.command)).show();
     }
 
     private void execute(String command) {
@@ -230,30 +220,39 @@ public class MainActivity extends AppCompatActivity {
             requestShizukuPermission();
             return;
         }
-        try {
-            Process process = Shizuku.newProcess(new String[]{"sh", "-c", command}, null, null);
-            new Thread(() -> {
-                try {
-                    int exitCode = process.waitFor();
-                    if (exitCode != 0) {
-                        runOnUiThread(() -> new AlertDialog.Builder(this)
-                            .setTitle("Perintah gagal")
-                            .setMessage("Kode keluar: " + exitCode +
-                                ". Firmware mungkin membatasi perintah ini.")
-                            .setPositiveButton("OK", null)
-                            .show());
+        Toast.makeText(this, "Menjalankan perintah...", Toast.LENGTH_SHORT).show();
+        ServiceConnection connection = new ServiceConnection() {
+            @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+                IUserService remote = IUserService.Stub.asInterface(binder);
+                executor.execute(() -> {
+                    try {
+                        String result = remote.exec(command);
+                        runOnUiThread(() -> {
+                            if (result != null && !result.trim().isEmpty())
+                                Toast.makeText(this, result, Toast.LENGTH_LONG).show();
+                        });
+                    } catch (Exception exception) {
+                        runOnUiThread(() -> showError("Gagal menjalankan perintah: " + exception.getMessage()));
+                    } finally {
+                        try { Shizuku.unbindUserService(serviceArgs, this, true); }
+                        catch (Exception ignored) {}
                     }
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                }
-            }).start();
+                });
+            }
+            @Override public void onServiceDisconnected(ComponentName name) {
+                runOnUiThread(() -> updateStatus());
+            }
+        };
+        try {
+            Shizuku.bindUserService(serviceArgs, connection);
         } catch (Exception exception) {
-            new AlertDialog.Builder(this)
-                .setTitle("PowerHub")
-                .setMessage("Gagal menjalankan perintah: " + exception.getMessage())
-                .setPositiveButton("OK", null)
-                .show();
+            showError("Tidak dapat menghubungkan layanan Shizuku: " + exception.getMessage());
         }
+    }
+
+    private void showError(String message) {
+        new AlertDialog.Builder(this).setTitle("PowerHub").setMessage(message)
+            .setPositiveButton("OK", null).show();
     }
 
     @Override protected void onResume() {
@@ -263,6 +262,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override protected void onDestroy() {
         Shizuku.removeRequestPermissionResultListener(permissionListener);
+        executor.shutdownNow();
         super.onDestroy();
     }
 }
