@@ -255,7 +255,19 @@ public class MainActivity extends AppCompatActivity {
                                 Toast.makeText(MainActivity.this, result, Toast.LENGTH_LONG).show();
                         });
                     } catch (Exception exception) {
-                        runOnUiThread(() -> showError("Gagal menjalankan perintah: " + exception.getMessage()));
+                        runOnUiThread(() -> {
+                            if ("input keyevent 26".equals(command)) {
+                                Toast.makeText(MainActivity.this,
+                                    "Perintah matikan layar telah dikirim. Koneksi layanan dapat terputus ketika perangkat terkunci.",
+                                    Toast.LENGTH_LONG).show();
+                            } else {
+                                String detail = exception.getMessage();
+                                if (detail == null || detail.trim().isEmpty()) {
+                                    detail = exception.getClass().getSimpleName();
+                                }
+                                showError("Gagal menjalankan perintah: " + detail);
+                            }
+                        });
                     } finally {
                         try { Shizuku.unbindUserService(serviceArgs, this, true); }
                         catch (Exception ignored) {}
