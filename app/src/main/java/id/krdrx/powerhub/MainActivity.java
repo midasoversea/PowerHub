@@ -180,8 +180,10 @@ public class MainActivity extends AppCompatActivity {
     private void requestShizukuPermission() {
         if (!Shizuku.pingBinder()) {
             new AlertDialog.Builder(this).setTitle("Shizuku belum aktif")
-                .setMessage("Buka aplikasi Shizuku dan mulai servicenya. Setelah aktif, kembali ke PowerHub.")
-                .setPositiveButton("Mengerti", null).show();
+                .setMessage("Buka Shizuku-Next, lalu mulai servicenya. Setelah aktif, kembali ke PowerHub.")
+                .setNegativeButton("Batal", null)
+                .setPositiveButton("Buka Shizuku", (dialog, which) -> openShizuku())
+                .show();
             updateStatus();
             return;
         }
@@ -191,6 +193,27 @@ public class MainActivity extends AppCompatActivity {
             Shizuku.requestPermission(REQUEST_PERMISSION);
         }
         updateStatus();
+    }
+
+    private void openShizuku() {
+        final String shizukuPackage = "moe.shizuku.privileged.api";
+        android.content.Intent launchIntent =
+            getPackageManager().getLaunchIntentForPackage(shizukuPackage);
+
+        if (launchIntent != null) {
+            launchIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                startActivity(launchIntent);
+            } catch (Exception exception) {
+                showError("Tidak dapat membuka Shizuku: " + exception.getMessage());
+            }
+        } else {
+            new AlertDialog.Builder(this)
+                .setTitle("Shizuku tidak ditemukan")
+                .setMessage("Aplikasi Shizuku-Next tidak ditemukan. Pastikan sudah terpasang.")
+                .setPositiveButton("OK", null)
+                .show();
+        }
     }
 
     private boolean canRun() {
